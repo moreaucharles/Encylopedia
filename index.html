@@ -1,0 +1,3377 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Encyclopedia</title>
+  <style>
+    :root{
+      --sidebar-w: 260px;
+      --bg: #e6e6e3;
+      --text: #111;
+      --muted: #666;
+      --border: #d9d9d9;
+      --shadow: 0 10px 34px rgba(0,0,0,.14);
+      --radius: 14px;
+    }
+    *{box-sizing:border-box}
+    html, body{height:100%; margin:0; font-family: ui-serif, Georgia, "Times New Roman", Times, serif; background:var(--bg); color:var(--text)}
+    a{color:inherit; text-decoration:none}
+    a:hover{text-decoration:underline}
+
+    /* Layout */
+    .app{
+      height:100%;
+      display:grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      overflow:hidden;
+    }
+    aside{
+      border-right:1px solid var(--border);
+      padding:22px 18px;
+      display:flex;
+      flex-direction:column;
+      gap:18px;
+      background:#fff;
+    }
+    .logo img{ width:70%; height:70%; object-fit:contain; display:block; }
+  
+
+    nav{display:flex; flex-direction:column; gap:10px; margin-top:8px;}
+    .navlink{font-size:20px; line-height:1.1; padding:2px 0; font-weight:600;}
+    .navlink.active{ text-decoration:underline; text-underline-offset:5px; }
+
+    .panel{margin-top:8px; display:flex; flex-direction:column; gap:12px;}
+    .muted{color:var(--muted); font-size:14px; line-height:1.35}
+
+    .field{display:flex; flex-direction:column; gap:6px;}
+    input[type="search"]{
+      width:100%;
+      padding:9px 10px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      font:inherit;
+      font-size:16px;
+      outline:none;
+    }
+    input[type="search"]:focus{
+      border-color:#999;
+      box-shadow: 0 0 0 3px rgba(0,0,0,.06);
+    }
+
+    .results{
+      max-height: 34vh;
+      overflow:auto;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:8px;
+      display:none;
+    }
+    .results.show{display:block;}
+    .result{
+      padding:8px 8px;
+      border-radius:10px;
+      cursor:pointer;
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+    .result:hover{ background: rgba(0,0,0,.04); }
+    .result .t{font-weight:600; font-size:15px}
+    .result .s{font-size:13px; color:var(--muted)}
+
+    /* Main canvas */
+    main{position:relative; overflow:hidden; background:var(--bg);}
+
+    #viewport{
+      position:absolute; inset:0;
+      overflow:hidden;
+      touch-action:none;
+      cursor:grab;
+    }
+    #viewport.grabbing{cursor:grabbing;}
+
+    #canvas{
+      position:absolute;
+      left:0; top:0;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    .artwork{
+      position:absolute;
+      border:1px solid rgba(0,0,0,.2);
+      background:#fff;
+      overflow:hidden;
+      user-select:none;
+      cursor:pointer;
+    }
+    .artwork img{
+      width:100%; height:100%;
+      object-fit:contain;          /* important : montre l’œuvre entière */
+      background:#fff;
+      display:block;
+    }
+    .artwork:hover{ border-color: rgba(0,0,0,.55); }
+
+    .artwork.highlight{
+      outline: 3px solid rgba(0,0,0,.85);
+      outline-offset: 2px;
+      animation: pulse 1.1s ease-in-out 2;
+    }
+    @keyframes pulse{
+      0%{ outline-color: rgba(0,0,0,.9); }
+      50%{ outline-color: rgba(0,0,0,.15); }
+      100%{ outline-color: rgba(0,0,0,.9); }
+    }
+
+    /* Zoom like mockup: "Zoom + -" */
+    .zoomBar{
+      position:absolute;
+      left:18px; bottom:14px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      z-index:10;
+      user-select:none;
+      background: rgba(255,255,255,.0);
+    }
+    .zoomLabel{
+      font-size:18px;
+      color:#111;
+      cursor:pointer;
+      padding:4px 6px;
+      border-radius:10px;
+    }
+    .zoomLabel:hover{ background: rgba(0,0,0,.04); }
+    .zoomBtn{
+      font-size:18px;
+      line-height:1;
+      padding:4px 8px;
+      border-radius:10px;
+      cursor:pointer;
+    }
+    .zoomBtn:hover{ background: rgba(0,0,0,.04); }
+    .zoomReadout{
+      font-size:13px; color:var(--muted);
+      margin-left:6px;
+    }
+
+    /* Modal */
+    .backdrop{
+      position:absolute;
+      inset:0;
+      background: rgba(0,0,0,.28);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      z-index:30;
+    }
+    .backdrop.show{display:flex;}
+    .modal{
+      width:min(1200px, 100%);
+      background:#fff;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      display:grid;
+      grid-template-columns: 1.3fr 1fr;
+      max-height:min(92vh, 1060px);
+    }
+    .modalMedia{
+      background:#f6f6f6;
+      display:grid;
+      place-items:center;
+      padding:16px;
+      border-right:1px solid var(--border);
+    }
+    .modalMedia img{
+      max-width:100%;
+      max-height: 76vh;
+      height:auto;
+      width:auto;
+      display:block;
+      border:1px solid rgba(0,0,0,.12);
+      background:#fff;
+    }
+    .modalInfo{
+      padding:18px 18px;
+      overflow:auto;
+    }
+    .modalHeader{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      border-bottom:1px solid var(--border);
+      padding-bottom:12px;
+      margin-bottom:12px;
+    }
+    .modalTitle{
+      font-size:20px;
+      font-weight:700;
+      line-height:1.2;
+      margin:0;
+    }
+    .close{
+      border:1px solid var(--border);
+      background:#fff;
+      border-radius:10px;
+      padding:7px 10px;
+      cursor:pointer;
+      font:inherit;
+    }
+    .kv{
+      display:grid;
+      grid-template-columns: 110px 1fr;
+      gap:10px 10px;
+      font-size:15px;
+      line-height:1.35;
+      margin-top:10px;
+    }
+    .k{color:var(--muted)}
+    .comment{
+      margin-top:14px;
+      font-size:15px;
+      line-height:1.5;
+      color:#222;
+      white-space:pre-wrap; /* garde retours à la ligne si tu en mets */
+    }
+
+    /* Overlays About / Other Works */
+    .overlay{
+      position:absolute;
+      inset:0;
+      background: rgba(255,255,255,.92);
+      display:none;
+      overflow:auto;
+      padding:28px 32px;
+      z-index:20;
+    }
+    .overlay.show{display:block;}
+    .overlay h2{margin:0 0 10px 0; font-size:28px}
+    .overlay .content{max-width: 840px; font-size:18px; line-height:1.55}
+    .pillrow{display:flex; flex-wrap:wrap; gap:10px; margin-top:16px}
+    .pill{
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:8px 12px;
+      cursor:pointer;
+      user-select:none;
+      background:#fff;
+    }
+    .pill.active{
+      border-color:#111;
+      box-shadow: 0 0 0 3px rgba(0,0,0,.06);
+    }
+
+    /* Mobile */
+    @media (max-width: 720px){
+      .app{grid-template-columns: 1fr;}
+      aside{
+        position:absolute; z-index:25; left:0; top:0; bottom:0;
+        width:min(82vw, 320px);
+        transform: translateX(-102%);
+        transition:.18s ease;
+        box-shadow: 0 0 0 9999px rgba(0,0,0,.0);
+      }
+      aside.open{
+        transform: translateX(0);
+        box-shadow: 0 0 0 9999px rgba(0,0,0,.25);
+      }
+      main{padding-top:52px;}
+      .topbar{
+        position:absolute; left:0; right:0; top:0; height:52px;
+        display:flex; align-items:center; gap:10px;
+        padding:0 12px;
+        border-bottom:1px solid var(--border);
+        background:#fff;
+        z-index:26;
+      }
+      .burger{height:34px; min-width:34px; border:1px solid var(--border); border-radius:10px; background:#fff; cursor:pointer;}
+      .zoomBar{left:12px; bottom:10px;}
+    }
+    @media (min-width: 721px){
+      .topbar{display:none;}
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <aside id="sidebar">
+      <div class="logo" title="Logo">
+  <img src="logo-cm.png" alt="CM" />
+</div>
+
+      <nav>
+        <a href="#" class="navlink active" data-route="encyclopedia">Encyclopedia</a>
+        <!-- <a href="#" class="navlink" data-route="other">Other Works</a> -->
+        <a href="#" class="navlink" data-route="about">About</a>
+      </nav>
+
+      <div class="panel" id="searchPanel">
+        <div class="field">
+          <label for="search" class="muted">Search</label>
+          <input id="search" type="search" placeholder="Titre, année, medium…" autocomplete="off" />
+        </div>
+        <div class="results" id="results"></div>
+   
+      </div>
+
+      <div class="muted footer">© <span id="year"></span> Charles Moreau</div>
+    </aside>
+
+
+    <main>
+      <div class="topbar">
+        <button class="burger" id="burger" aria-label="Menu">☰</button>
+        <div style="font-weight:700;">Encyclopedia</div>
+      </div>
+
+      <div id="viewport" aria-label="Canvas">
+        <div id="canvas"></div>
+      </div>
+
+      <!-- Zoom controls like mockup -->
+      <div class="zoomBar" aria-label="Zoom">
+        <div class="zoomLabel" id="fit" title="Vue d’ensemble">Zoom</div>
+        <div class="zoomBtn" id="zoomIn" title="Zoom +">+</div>
+        <div class="zoomBtn" id="zoomOut" title="Zoom -">-</div>
+        <div class="zoomReadout" id="zoomReadout">100%</div>
+      </div>
+
+      <!-- About overlay -->
+      <section class="overlay" id="aboutOverlay" aria-label="About">
+        <h2>About</h2>
+        <div class="content" id="aboutText">
+ <div class="about-block">
+    <p>Bienvenue sur ce site, qui regroupe (presque) tous les tableaux et dessins que j’ai pu faire depuis dix ans et le début de ce projet sur l’échelle de notre monde. Tout ce que vous verrez ici est représenté à sa taille d’origine.</p>
+
+    <p>Si ces œuvres parcourent tout l’éventail des stades du vivant, de la naissance à la mort, elles veulent surtout mettre en avant un fait indiscutable&nbsp;: c’est l’entremêlement géographique originel de ce qui nous entoure. Il est loin le temps où l’on pouvait prétendre vivre sur un territoire libre d’influences étrangères. Pour le pire et le meilleur la mondialisation est un fait, et au jour le jour nous en dépendons tous pour notre survie.</p>
+
+    <p>C’est cette interdépendance que je veux célébrer.</p>
+  </div>
+
+ <div class="about-spacer" style="height:66px;"></div>
+
+
+  <div class="about-block">
+    <p>Welcome to this website, which brings together (almost) all the paintings and drawings I've created over the past ten years, since the beginning of this project on the scale of our world. Everything you see here is represented at its original size.</p>
+
+    <p>While these works encompass the entire spectrum of life, from birth to death, they primarily aim to highlight an undeniable fact: the inherent geographical interconnectedness of our surroundings. Gone are the days when we could claim to live in a territory free from foreign influence. For better or for worse, globalization is a reality, and we all depend on it for our daily survival.</p>
+
+    <p>It is this interdependence that I wish to celebrate.</p>
+  </div>
+
+  <div class="about-signature">
+    <div>Charles Moreau</div>
+    <div>Saint Barthélemy, 15 mai 2026</div>
+          </div>
+        </div>
+ <div class="about-spacer" style="height:66px;"></div>
+  <div>Contact direct:</div>
+  <div>moreau.charles@yahoo.com</div>
+
+  <div style="height: 1em;"></div>
+
+  <div>For business:</div>
+  <div>info@spacestbarth.com</div>
+</div>
+      </section>
+
+      <!-- Other works overlay -->
+      <section class="overlay" id="otherOverlay" aria-label="Other Works">
+        <h2>Other Works</h2>
+        <div class="content">
+          <p>
+            Sélectionne une série pour afficher uniquement ces œuvres (hors “Encyclopedia”).
+          </p>
+          <div class="pillrow" id="seriesPills"></div>
+        </div>
+      </section>
+
+      <!-- Modal -->
+      <div class="backdrop" id="backdrop" role="dialog" aria-modal="true" aria-label="Artwork details">
+        <div class="modal" role="document">
+          <div class="modalMedia">
+            <img id="modalImg" src="" alt="" />
+          </div>
+          <div class="modalInfo">
+            <div class="modalHeader">
+              <div>
+                <h3 class="modalTitle" id="modalTitle">Titre</h3>
+              </div>
+              <button class="close" id="closeModal">Close</button>
+            </div>
+
+            <!-- EXACTEMENT tes catégories -->
+            <div class="kv">
+              <div class="k">Année</div><div id="modalYear">—</div>
+              <div class="k">Medium</div><div id="modalMedium">—</div>
+              <div class="k">Taille</div><div id="modalSize">—</div>
+            </div>
+
+            <div class="comment" id="modalComment"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script>
+/**
+ * Échelle relative (réelle) :
+ * chaque œuvre a wCm/hCm (dimensions en cm).
+ * pxPerCm définit la taille “à l’écran” quand zoom = 1.
+ */
+const pxPerCm = 6; // ajuste : 4 (plus petit) / 8 (plus grand)
+function cmToPx(v){
+  const n = parseFloat(String(v).replace(',', '.'));
+  if (!isFinite(n)) return 0;
+  return n * pxPerCm;
+}
+
+// IMPORTANT : mets toutes tes œuvres ici.
+// - group: "encyclopedia" pour l’encyclopédie (même “plan”)
+// - group: "other" pour le reste
+// - id doit être unique et stable (sert à fixer la position pour toujours)
+// - comment = ton texte libre
+const ARTWORKS = [
+  {
+    id: "enc-0001",
+    group: "encyclopedia",
+    title: "Cérès",
+    year: "2025",
+    medium: "huile sur bois",
+    wCm: 20,
+    hCm: 28.88,
+    image: "images/enc-0001.jpg",
+    comment: "Le petit chat de la maison, seul félin apprivoisé parmi une horde de huit bêtes à moitié sauvages. Cérès fut receuillie à la naissance, abandonnée par sa mère."
+  },
+  {
+    id: "enc-0002",
+    group: "encyclopedia",
+    title: "Espadrilles",
+    year: "2024",
+    medium: "huile sur bois",
+    wCm: 122,
+    hCm: 75,
+    image: "images/enc-0002.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0003",
+    group: "encyclopedia",
+    title: "Couronne - sansevieria trifasciata - Afrique de l'Ouest",
+    year: "2016",
+    medium: "stylo bille et encre de Chine sur toile",
+    wCm: 400,
+    hCm: 143,
+    image: "images/enc-0003.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0004",
+    group: "encyclopedia",
+    title: "Hippie - cocos nucifera - probablement Asie du Sud ou Océanie",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 39.29,
+    hCm: 59.4,
+    image: "images/enc-0004.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0005",
+    group: "encyclopedia",
+    title: "Purple - tradescantia spathacea - Amérique Centrale",
+    year: "2016",
+    medium: "huile sur toile",
+    wCm: 56,
+    hCm: 154,
+    image: "images/enc-0005.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0006",
+    group: "encyclopedia",
+    title: "Johanna",
+    year: "2020",
+    medium: "huile sur toile",
+    wCm: 165,
+    hCm: 109,
+    image: "images/enc-0006.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0007",
+    group: "encyclopedia",
+    title: "Mapou Rouge - cordia sebestena - Antilles",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 166,
+    hCm: 105,
+    image: "images/enc-0007.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0008",
+    group: "encyclopedia",
+    title: "Cabri en Kit - capra hircus - orginie indéterminée",
+    year: "2018",
+    medium: "huile sur bois",
+    wCm: 128.29,
+    hCm: 130,
+    image: "images/enc-0008.jpg",
+    comment: "Squelette de bouc trouvé enfoui dans une coulée de boue quelques temps après le cyclone Irma. Touché par la vue de cette tragédie j'ai voulu le représenter dans toutes ses parties, comme les maquettes avec lesquelles je jouai enfant."
+  },
+  {
+    id: "enc-0009",
+    group: "encyclopedia",
+    title: "L'île - bryophyllum daigremontianum - Madagascar",
+    year: "2016",
+    medium: "encre de Chine sur toile",
+    wCm: 54,
+    hCm: 93,
+    image: "images/enc-0009.jpg",
+    comment: "Une nouvelle manière de représenter la carte de Saint Barthélemy."
+  },
+  {
+    id: "enc-0010",
+    group: "encyclopedia",
+    title: "Langouste - panulirus regius - Antilles",
+    year: "2017",
+    medium: "encre de Chine et feutre acrylique sur bois",
+    wCm: 34,
+    hCm: 42,
+    image: "images/enc-0010.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0011",
+    group: "encyclopedia",
+    title: "To' tu - chelodonis carbonaria - Amérique du Sud",
+    year: "2015",
+    medium: "huile sur toile",
+    wCm: 47,
+    hCm: 34,
+    image: "images/enc-0011.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0012",
+    group: "encyclopedia",
+    title: "Aquarium - poecilia sphenops & xiphophorus maculatus - Golfe du Mexique",
+    year: "2016",
+    medium: "encre de Chine, crayon et peinture métalisée sur papier",
+    wCm: 41.04,
+    hCm: 59.4,
+    image: "images/enc-0012.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0013",
+    group: "encyclopedia",
+    title: "Agave - agave americana - Mexique et Sud-Ouest des Etats-Unis",
+    year: "2016",
+    medium: "encre de Chine et stylo bille sur toile",
+    wCm: 50,
+    hCm: 54,
+    image: "images/enc-0013.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0014",
+    group: "encyclopedia",
+    title: "Travail de Chenille - bahauinia purpurea - Chine et Asie du Sud",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 58.76,
+    image: "images/enc-0014.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0015",
+    group: "encyclopedia",
+    title: "Le Monstre - scolopendra & lasius niger - Antilles & Europe, Amérique du Nord et Inde",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 29.7,
+    hCm: 21,
+    image: "images/enc-0015.jpg",
+    comment: "Tel Gulliver et les liliputiens une meute de fourmis noires s'attaquent au cadavre d'un petit scolopendre"
+  },
+  {
+    id: "enc-0016",
+    group: "encyclopedia",
+    title: "Lunettes - echinoida - Antilles",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 59.4,
+    hCm: 40.99,
+    image: "images/enc-0016.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0017",
+    group: "encyclopedia",
+    title: "Rameaux - clusia major - Antilles",
+    year: "2016",
+    medium: "stylo bille et encre de Chine sur toile",
+    wCm: 85,
+    hCm: 128,
+    image: "images/enc-0017.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0018",
+    group: "encyclopedia",
+    title: "Pouponnière de quenettiers - meliccocus bijugatus - Amérique du Sud",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 58.64,
+    hCm: 42,
+    image: "images/enc-0018.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0019",
+    group: "encyclopedia",
+    title: "Etoile Courante - aloe vera - probablement Sahara",
+    year: "2016",
+    medium: "huile sur toile",
+    wCm: 103,
+    hCm: 103,
+    image: "images/enc-0019.jpg",
+    comment: " Groupe de feuilles sèches d'aloe vera disposées autour de la racine centrale"
+  },
+  {
+    id: "enc-0020",
+    group: "encyclopedia",
+    title: "Jeune Nénuphar - nymphoides aquatica - Sud-Est des Etats-Unis",
+    year: "2016",
+    medium: "encre de Chine et crayon blanc sur papier",
+    wCm: 21,
+    hCm: 28,
+    image: "images/enc-0020.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0021",
+    group: "encyclopedia",
+    title: "jeune Iguane Ecrasé - iguana iguana - Amérique du Sud",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 59.4,
+    hCm: 42,
+    image: "images/enc-0021.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0022",
+    group: "encyclopedia",
+    title: "Boulette - canis lupus familiaris - origine indéterminée",
+    year: "2015",
+    medium: "huile sur toile",
+    wCm: 49,
+    hCm: 60,
+    image: "images/enc-0022.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0023",
+    group: "encyclopedia",
+    title: "Liane - epipremnum aureum - Mo'orea, Polynésie",
+    year: "2016",
+    medium: "encre de Chine sur papier",
+    wCm: 59.4,
+    hCm: 42,
+    image: "images/enc-0023.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0024",
+    group: "encyclopedia",
+    title: "Lazare - coereba flaveola - Antilles",
+    year: "2016",
+    medium: "huile sur toile",
+    wCm: 64,
+    hCm: 75,
+    image: "images/enc-0024.jpg",
+    comment: "C'était un joli sucrier (le nom local de cet oiseau) que j'avais trouvé mort devant chez moi. J'ai voulu lui rendre hommage et le refaire voler une dernière fois... lève toi et vole!"
+  },
+  {
+    id: "enc-0025",
+    group: "encyclopedia",
+    title: "Graines - pisonia subcordata - Antilles",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0025.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0026",
+    group: "encyclopedia",
+    title: "Rorschach - callyspongia tenerrima - Antilles",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 35.5,
+    hCm: 25.1,
+    image: "images/enc-0026.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0027",
+    group: "encyclopedia",
+    title: "Aloe - aloe vera - probablement Sahara",
+    year: "2016",
+    medium: "stylo bille et encre de Chine sur toile",
+    wCm: 150,
+    hCm: 150,
+    image: "images/enc-0027.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0028",
+    group: "encyclopedia",
+    title: "raisinier - coccoloba uvifera - Antilles",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 35.5,
+    hCm: 25.1,
+    image: "images/enc-0028.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0029",
+    group: "encyclopedia",
+    title: "Heart of Stone - espèce indéterminée - Antilles",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 25.1,
+    hCm: 35.5,
+    image: "images/enc-0029.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0030",
+    group: "encyclopedia",
+    title: "Torche - guzmania - Antilles et Amérique Centrale",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 41.17,
+    hCm: 59.4,
+    image: "images/enc-0030.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0031",
+    group: "encyclopedia",
+    title: "Filets - epinephelus adscensionis - Antilles",
+    year: "2017",
+    medium: "huile sur toile",
+    wCm: 57,
+    hCm: 42,
+    image: "images/enc-0031.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0032",
+    group: "encyclopedia",
+    title: "Bouture de Cactus - cephalocereus nobilis - Mexique",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0032.jpg",
+    comment: "Petit tronçon de cactus trouvé sur le bord d'une route et qui avait commencé à prendre racine"
+  },
+  {
+    id: "enc-0033",
+    group: "encyclopedia",
+    title: "Petit Strombe - lobatus gigas - Antilles",
+    year: "2015",
+    medium: "stylo bille sur papier",
+    wCm: 21,
+    hCm: 29.7,
+    image: "images/enc-0033.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0034",
+    group: "encyclopedia",
+    title: "Fragments Ailés - limentis archippus - Etats-Unis et Mexique",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0034.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0035",
+    group: "encyclopedia",
+    title: "Strange Fruits - gossyptium hirsutum - régions tropicales et sub-tropicales",
+    year: "2017",
+    medium: "stylo bille et crayon blanc sur papier",
+    wCm: 41.07,
+    hCm: 59.4,
+    image: "images/enc-0035.jpg",
+    comment: "Avec la canne à sucre le coton est la plante la plus problèmatique de l'histoire des Antilles. Aujourd'hui affranchi on le retrouve un peu partout poussant à l'état sauvage à Saint Barthélemy, vestige botanique d'une cruelle époque"
+  },
+  {
+    id: "enc-0036",
+    group: "encyclopedia",
+    title: "Plexus - panulirus guttatus - Brésil",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 29.5,
+    hCm: 40.5,
+    image: "images/enc-0036.jpg",
+    comment: "Plexus de langouste du Brésil, espèce envahissante et qui tend à supplanter la langouste locale"
+  },
+  {
+    id: "enc-0037",
+    group: "encyclopedia",
+    title: "Après la pluie - lissachatina fulica - Afrique de l'Est",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 41.41,
+    hCm: 59.4,
+    image: "images/enc-0037.jpg",
+    comment: "Le climat de Saint Barthélemy est trop sec pour permettre à ces escargots de devenir aussi gros et nuisible qu'ailleurs. Cette charmante assemblée avait profité d'une averse soudaine pour sortir de leurs abris et se réunir"
+  },
+  {
+    id: "enc-0038",
+    group: "encyclopedia",
+    title: "Pousse de Tête - cyperus papyrus - Afrique",
+    year: "2016",
+    medium: "encre de Chine sur papier",
+    wCm: 29.5,
+    hCm: 40.5,
+    image: "images/enc-0038.jpg",
+    comment: "Quand la tête d'un papyrus, tombe dans l'eau, suite à un coup de vent par exemple, une nouvelle tige en profite pour s'élancer vers le ciel"
+  },
+  {
+    id: "enc-0039",
+    group: "encyclopedia",
+    title: "Death of a Beachcomber - gecarcinus lateralis - du Texas au Venezuela",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 35.5,
+    hCm: 25.1,
+    image: "images/enc-0039.jpg",
+    comment: "Au 19ème siècle on appelait beachcomber les matelots occidentaux qui profitaient d'une escale en Polynésie pour déserter le bord et vivre sur les plages."
+  },
+  {
+    id: "enc-0040",
+    group: "encyclopedia",
+    title: "Jeunes Noix - cocos nucifera - probablement Asie du Sud ou Océanie",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 59.4,
+    hCm: 42,
+    image: "images/enc-0040.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0041",
+    group: "encyclopedia",
+    title: "Graine de Massue - casuarina equisetifolia - Asie du Sud et Océanie",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 29.5,
+    hCm: 40.5,
+    image: "images/enc-0041.jpg",
+    comment: "Localement appelé filao cet arbre à la dureté extrème est traditionellement utilisé en Polynésie pour fabriquer les massues de guerre"
+  },
+  {
+    id: "enc-0042",
+    group: "encyclopedia",
+    title: "Vieux Martyr - lobatus giga - Antilles",
+    year: "2016",
+    medium: "crayon, encre de Chine et gouache sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0042.jpg",
+    comment: "Communément utilisé pour décorer les murets, les jardins ou même les tombes cette vieille coquille couverte de lichen a la noblesse d'une antique ruine "
+  },
+  {
+    id: "enc-0043",
+    group: "encyclopedia",
+    title: "Fragment de Palme - dypsis lutescens - Madagascar",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 41.5,
+    hCm: 59.4,
+    image: "images/enc-0043.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0044",
+    group: "encyclopedia",
+    title: "Sauterelle - caelifera - origine indéterminée",
+    year: "2016",
+    medium: "encre de Chine sur papier",
+    wCm: 23,
+    hCm: 21,
+    image: "images/enc-0044.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0045",
+    group: "encyclopedia",
+    title: "Peau de Bourse - aluterus punctata - mers tropicales et sub-tropicales",
+    year: "2017",
+    medium: "stylo bille et crayons sur papier",
+    wCm: 59.4,
+    hCm: 41.39,
+    image: "images/enc-0045.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0046",
+    group: "encyclopedia",
+    title: "Plume de casque - numida meleagris - Afrique de l'Ouest",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 41.43,
+    hCm: 59.4,
+    image: "images/enc-0046.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0047",
+    group: "encyclopedia",
+    title: "Pile et Face - espèce indéterminée",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 59.4,
+    hCm: 41.32,
+    image: "images/enc-0047.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0048",
+    group: "encyclopedia",
+    title: "Bois Lolo - leucaena leucocephala - Amérique Centrale",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 59.4,
+    hCm: 42,
+    image: "images/enc-0048.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0049",
+    group: "encyclopedia",
+    title: "Sucrier Alongé - coereba flaveola - Antilles",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 29.7,
+    hCm: 21,
+    image: "images/enc-0049.jpg",
+    comment: "Un autre dessin fait à partir du même sucrier mort. Cette fois-ci comme un gisant médiéval."
+  },
+  {
+    id: "enc-0050",
+    group: "encyclopedia",
+    title: "Deux Squelettes - bougainvillea - Amérique du Sud",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0050.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0051",
+    group: "encyclopedia",
+    title: "Huit - panulirus guttatus - Brésil",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 41.33,
+    hCm: 59.4,
+    image: "images/enc-0051.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0052",
+    group: "encyclopedia",
+    title: "Dragon - bryophyllum daigremontianum - Madagascar",
+    year: "2016",
+    medium: "stylo bille et encre de Chine sur toile",
+    wCm: 70,
+    hCm: 113,
+    image: "images/enc-0052.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0053",
+    group: "encyclopedia",
+    title: "Crâne - acanthocybium solandri - mers tropicales",
+    year: "2017",
+    medium: "stylo bille et crayon blanc sur papier",
+    wCm: 40.58,
+    hCm: 59.4,
+    image: "images/enc-0053.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0054",
+    group: "encyclopedia",
+    title: "Os et Becs - numida meleagris & gallus gallus - Afrique de l'Ouest & Nouvelle Guinée ou Asie du Sud",
+    year: "2017",
+    medium: "stylo bille et crayon blanc sur papier",
+    wCm: 41.18,
+    hCm: 59.4,
+    image: "images/enc-0054.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0055",
+    group: "encyclopedia",
+    title: "Road Kill - ameiva plei - Anguilla, Saint Martin et Saint Barthélemy",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 58,
+    image: "images/enc-0055.jpg",
+    comment: "Une des rares espèces endémiques des Iles du Nord, un lézard vorace aux griffes impressionantes qui fini souvent dans le ventre des chats... ou sous les roues des voitures."
+  },
+  {
+    id: "enc-0056",
+    group: "encyclopedia",
+    title: "Mouvement - yucca aloifolia - Sud-Ouest des Etats-Unis et Mexique",
+    year: "2016",
+    medium: "encre de Chine sur toile",
+    wCm: 200,
+    hCm: 103,
+    image: "images/enc-0056.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0057",
+    group: "encyclopedia",
+    title: "Destruction d'un Bâtiment Occupé Illégalement et Abandonné - cittarium pica - Antilles",
+    year: "2017",
+    medium: "stylo bille et crayon blanc sur papier",
+    wCm: 40.68,
+    hCm: 59.4,
+    image: "images/enc-0057.jpg",
+    comment: "Localement appelé burgo, ces coquillages sont le refuge favori des bernards l'ermites qui n'hésitent pas à les squatter et à en changer quand ceux-ci sont devenus trop étroits"
+  },
+  {
+    id: "enc-0058",
+    group: "encyclopedia",
+    title: "Pétrifié - gorgonacea - Antilles",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 41.28,
+    hCm: 59.4,
+    image: "images/enc-0058.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0059",
+    group: "encyclopedia",
+    title: "Karata - tillandsia utriculata - Amérique Centrale et Antilles",
+    year: "2017",
+    medium: "huile sur papier",
+    wCm: 59.4,
+    hCm: 42,
+    image: "images/enc-0059.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0060",
+    group: "encyclopedia",
+    title: "Peau de cactus - cephalocereus nobilis - Mexique",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 41.31,
+    hCm: 59.4,
+    image: "images/enc-0060.jpg",
+    comment: "Fragilissime peau de cactus cierge qui s'était détachée d'un vieux morceau tombé à terre"
+  },
+  {
+    id: "enc-0061",
+    group: "encyclopedia",
+    title: "Explosion - cardisoma guanhumi - Antilles",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 59.4,
+    hCm: 41.17,
+    image: "images/enc-0061.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0062",
+    group: "encyclopedia",
+    title: "Zouave",
+    year: "2016",
+    medium: "huile sur toile",
+    wCm: 110,
+    hCm: 246,
+    image: "images/enc-0062.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0063",
+    group: "encyclopedia",
+    title: "Sucier Mort - coereba flaveola - Antilles",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 29.5,
+    hCm: 40.5,
+    image: "images/enc-0063.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0064",
+    group: "encyclopedia",
+    title: "Herbe - pennisetum setaceum - Afrique, Moyen-Orient et Asie",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 41.54,
+    hCm: 59.4,
+    image: "images/enc-0064.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0065",
+    group: "encyclopedia",
+    title: "Bol de Tête - numida meleagris & gallus gallus - Afrique de l'Ouest & Nouvelle Guinée ou Asie du Sud",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 57.58,
+    image: "images/enc-0065.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0066",
+    group: "encyclopedia",
+    title: "Dancing Stars - stapelia hirsuta - Afrique du Sud",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 41.12,
+    hCm: 59.4,
+    image: "images/enc-0066.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0067",
+    group: "encyclopedia",
+    title: "Déjeuner Entre Amis - lutjanus guttatus - Antilles",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 59.4,
+    hCm: 41.17,
+    image: "images/enc-0067.jpg",
+    comment: "Restes d'un dorade grillée, pêchée le matin même par des copains. Délicieuse! "
+  },
+  {
+    id: "enc-0068",
+    group: "encyclopedia",
+    title: "Fosse Commune - espèces variées",
+    year: "2016",
+    medium: "stylo bille et encre de Chine sur toile",
+    wCm: 123,
+    hCm: 120,
+    image: "images/enc-0068.jpg",
+    comment: "Tas de feuilles et branches laissé par le jardinier"
+  },
+  {
+    id: "enc-0069",
+    group: "encyclopedia",
+    title: "espoir - meliccocus bijugatus - Amérique du Sud",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 27.44,
+    hCm: 40,
+    image: "images/enc-0069.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0070",
+    group: "encyclopedia",
+    title: "Grand Accidenté - chelodonis carbonaria - Amérique du Sud",
+    year: "2016",
+    medium: "stylo bille et crayon blanc sur papier",
+    wCm: 39.62,
+    hCm: 59.4,
+    image: "images/enc-0070.jpg",
+    comment: "Les tortues charbonnières très communes à Saint Barthélemy furent orginellement importées par les Arawaks, venus d'Amérique du Sud. Source importante de protéines alors elles sont devenues menacées dans leur environnement d'origine."
+  },
+  {
+    id: "enc-0071",
+    group: "encyclopedia",
+    title: "Tempête - tillandsia utriculata - Amérique Centrale et Antilles",
+    year: "2016",
+    medium: "stylo bille et encre de Chine sur toile",
+    wCm: 170,
+    hCm: 82,
+    image: "images/enc-0071.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0072",
+    group: "encyclopedia",
+    title: "Acacia, Epines et Graines - acacia tortuosa- Antilles",
+    year: "2016",
+    medium: "stylo bille et encre de Chine sur toile",
+    wCm: 38,
+    hCm: 64,
+    image: "images/enc-0072.jpg",
+    comment: "Une nouvelle couronne d'épine"
+  },
+  {
+    id: "enc-0073",
+    group: "encyclopedia",
+    title: "Fantôme - sabal causiarum - Grandes Antilles et Bermudes",
+    year: "2016",
+    medium: "stylo bille sur toile",
+    wCm: 117,
+    hCm: 236,
+    image: "images/enc-0073.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0074",
+    group: "encyclopedia",
+    title: "Groseilles Pays - hibiscus sabdariffa - Guinée",
+    year: "2016",
+    medium: "stylo bille sur papier",
+    wCm: 59.4,
+    hCm: 42,
+    image: "images/enc-0074.jpg",
+    comment: "On appelle pays dans les Antilles tout ce que l'on croit être local. Ici des fruits d'hibiscus africains."
+  },
+  {
+    id: "enc-0075",
+    group: "encyclopedia",
+    title: "Arbre Indécent - calotropis procera - de l'Afrique du Nord jusqu'à l'Indonésie",
+    year: "2017",
+    medium: "encre de Chine et feutre acrylique sur toile",
+    wCm: 85,
+    hCm: 200,
+    image: "images/enc-0075.jpg",
+    comment: "Souche morte d'un arbuste communément appelé couillassier, en vertu de ses fruits évocateurs"
+  },
+  {
+    id: "enc-0076",
+    group: "encyclopedia",
+    title: "Base de Feuille Morte - roystonea regia - Mexique, Sud-Est des Etats-Unis et Antilles",
+    year: "2017",
+    medium: "encre de Chine et feutre acrylique sur toile",
+    wCm: 120,
+    hCm: 250,
+    image: "images/enc-0076.jpg",
+    comment: "Base d'une palme de palmier royal. Pour un européen l'échelle de la nature sous les Tropiques est proprement stupéfiante."
+  },
+  {
+    id: "enc-0077",
+    group: "encyclopedia",
+    title: "Japon - antigonon leptopus - Mexique",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 56.71,
+    image: "images/enc-0077.jpg",
+    comment: "Délicat fragment de liane corail, espèce extrêment envahissante reprenant la forme de l'archipel nippon."
+  },
+  {
+    id: "enc-0078",
+    group: "encyclopedia",
+    title: "Branche - ricinus communis - Méditerranée, Afrique de l'Est et Inde",
+    year: "2016",
+    medium: "stylo bille et encre de Chine sur toile",
+    wCm: 74,
+    hCm: 148,
+    image: "images/enc-0078.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0079",
+    group: "encyclopedia",
+    title: "Impudicus - musa acuminata paradisiaca - Inde et Australie",
+    year: "2017",
+    medium: "Huile sur toile",
+    wCm: 45,
+    hCm: 99,
+    image: "images/enc-0079.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0080",
+    group: "encyclopedia",
+    title: "Pluie d'Asteroïdes - espèces variées - Antilles",
+    year: "2017",
+    medium: "encre de Chine et feutre acrylique sur toile",
+    wCm: 72,
+    hCm: 245,
+    image: "images/enc-0080.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0081",
+    group: "encyclopedia",
+    title: "Barbecue - artocarpus altilis - Polynésie",
+    year: "2016",
+    medium: "stylo bille et crayon blanc sur papier",
+    wCm: 40.82,
+    hCm: 59.4,
+    image: "images/enc-0081.jpg",
+    comment: "Fruit à pain rôti au feu de bois"
+  },
+  {
+    id: "enc-0082",
+    group: "encyclopedia",
+    title: "Requiem - chelonia midas - Antilles",
+    year: "2017",
+    medium: "huile sur toile",
+    wCm: 80,
+    hCm: 150,
+    image: "images/enc-0082.jpg",
+    comment: "squelette de tortue marine trouvé disséminé dans les rochers"
+  },
+  {
+    id: "enc-0083",
+    group: "encyclopedia",
+    title: "Tengah le Tapir - tapirus indicus - Asie du Sud-Est",
+    year: "2018",
+    medium: "huile sur toile",
+    wCm: 227,
+    hCm: 140,
+    image: "images/enc-0083.jpg",
+    comment: "Tengah est le tapir de Malaisie de la Ménagerie du Jardin des Plantes à Paris"
+  },
+ {
+    id: "enc-0084",
+    group: "encyclopedia",
+    title: "Les Mangues - mangifera indica - Asie du Sud-Est",
+    year: "2018",
+    medium: "huile sur toile",
+    wCm: 120,
+    hCm: 140,
+    image: "images/enc-0084.jpg",
+    comment: ""
+  },
+ {
+    id: "enc-0085",
+    group: "encyclopedia",
+    title: "Filets d'Ange - pomacanthus paru - Antilles",
+    year: "2018",
+    medium: "huile sur bois",
+    wCm: 76,
+    hCm: 72.45,
+    image: "images/enc-0085.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0086",
+    group: "encyclopedia",
+    title: "Rouge Pérou - bougainvillea peruviana - Amérique du Sud",
+    year: "2018",
+    medium: "stylo bille et feutre acrylique sur papier",
+    wCm: 41.51,
+    hCm: 59.4,
+    image: "images/enc-0086.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0087",
+    group: "encyclopedia",
+    title: "Cauchemar du Bananier - cosmopolites sordidus - origine indéterminée",
+    year: "2018",
+    medium: "stylo bille sur papier",
+    wCm: 25.11,
+    hCm: 35.5,
+    image: "images/enc-0087.jpg",
+    comment: "Le charançon de la banane, petit insecte vorace est responsable de la disparition mondiale des plants de Gros Marcel qui était la banane la plus gouteuse est la plus consommée dans le monde. Maintenant remplacée par la cavendish. C'est à cause de ce petit insecte que le chlordécone, terrible pesticide cancérigène a été massivement utilisé dans les Antilles."
+  },
+  {
+    id: "enc-0088",
+    group: "encyclopedia",
+    title: "Pennies from Heaven - tripneustes ventricosus - Antilles",
+    year: "2018",
+    medium: "crayon blanc et encre de Chine sur papier",
+    wCm: 21.5,
+    hCm: 30,
+    image: "images/enc-0088.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0089",
+    group: "encyclopedia",
+    title: "Misère Pourpre - tradescantia pallida - Amérique Centrale",
+    year: "2016",
+    medium: "stylo bille et feutre acrylique sur papier",
+    wCm: 41.59,
+    hCm: 59.4,
+    image: "images/enc-0089.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0090",
+    group: "encyclopedia",
+    title: "les Mouettes - leucophaeus atricilla - Amériques",
+    year: "2017",
+    medium: "huile sur toile",
+    wCm: 62,
+    hCm: 140,
+    image: "images/enc-0090.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0091",
+    group: "encyclopedia",
+    title: "Putain de Sargasses - sargassum natans - Atlantique Ouest",
+    year: "2018",
+    medium: "stylo bille et feutre acrylique sur papier",
+    wCm: 20.6,
+    hCm: 30,
+    image: "images/enc-0091.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0092",
+    group: "encyclopedia",
+    title: "Black Croton - codiaeum variegatum - Indonésie et Pacifique Occidental",
+    year: "2019",
+    medium: "huile sur toile",
+    wCm: 109,
+    hCm: 172,
+    image: "images/enc-0092.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0093",
+    group: "encyclopedia",
+    title: "Poule Rebelle - gallus gallus - Nouvelle Guinée ou Asie du Sud",
+    year: "2018",
+    medium: "huile sur panneau d'isolation",
+    wCm: 57,
+    hCm: 56,
+    image: "images/enc-0093.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0094",
+    group: "encyclopedia",
+    title: "Après Irma: Grand Fond - chaetodon striatus - Atlantique Occcidental",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 20,
+    hCm: 15,
+    image: "images/enc-0094.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0095",
+    group: "encyclopedia",
+    title: "Noël Tropical - araucaria heterophylla - Norfold Island, Polynésie",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0095.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0096",
+    group: "encyclopedia",
+    title: "Ralentissez! - iguana delicatissima - Anguilla, Saint Martin et Saint Barthélemy",
+    year: "2018",
+    medium: "huile sur bois",
+    wCm: 90.5,
+    hCm: 92.41,
+    image: "images/enc-0096.jpg",
+    comment: "Iguane des Petites Antilles, espèce endémique uniquement présente sur les trois Iles du Nord, protégé et en voie d'extinction. Celui-ci fut écrasé par un camion sous les yeux. La tache verte sur la gauche est le contenau de son estomac..."
+  },
+  {
+    id: "enc-0097",
+    group: "encyclopedia",
+    title: "Flêche Brisée - scomberesocidae - océans tropicaux",
+    year: "2017",
+    medium: "feutres acrylique sur aluminium",
+    wCm: 22,
+    hCm: 33.37,
+    image: "images/enc-0097.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0098",
+    group: "encyclopedia",
+    title: "Concombre Pays - cucumis anguria - Afrique Tropicale",
+    year: "2017",
+    medium: "stylo bille et feutre acrylique sur papier",
+    wCm: 41.59,
+    hCm: 59.4,
+    image: "images/enc-0098.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0099",
+    group: "encyclopedia",
+    title: "La Grande Aigrette - ardea alba egretta - Afrique et Amérique du Sud",
+    year: "2018",
+    medium: "feutre acrylique et huile sur panneau d'isolation",
+    wCm: 61,
+    hCm: 131.94,
+    image: "images/enc-0099.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0100",
+    group: "encyclopedia",
+    title: "Filets de Mahi Mahi - coryphaena hippurus - mers tropicales",
+    year: "2018",
+    medium: "huile sur bois",
+    wCm: 122,
+    hCm: 46.84,
+    image: "images/enc-0100.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0101",
+    group: "encyclopedia",
+    title: "Mimosa - vachellia tortuosa - Antilles",
+    year: "2018",
+    medium: "stylo bille et feutres acryliques sur bois",
+    wCm: 41.17,
+    hCm: 59.4,
+    image: "images/enc-0101.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0102",
+    group: "encyclopedia",
+    title: "Travail de Poule - alsophis rijgersmaei - Anguilla, saint Martin et Saint Barthélemy",
+    year: "2017",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0102.jpg",
+    comment: "Un des trois reptiles endémiques des Iles du Nord la coureuse du Banc d'Anguilla comme on l'appelle ici est un petit serpent inoffensif. Celle-ci fut picorée à mort par une poule qui l'acheva avant qu'elle ne puisse se cacher dans un trou."
+  },
+  {
+    id: "enc-0103",
+    group: "encyclopedia",
+    title: "Côte - dermochelys coriacea - mers tropicales",
+    year: "2018",
+    medium: "craie sur papier noir",
+    wCm: 21,
+    hCm: 28.97,
+    image: "images/enc-0103.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0104",
+    group: "encyclopedia",
+    title: "Herbier - espèces variées",
+    year: "2018",
+    medium: "encre de Chine sur bois",
+    wCm: 270.37,
+    hCm: 320,
+    image: "images/enc-0104.jpg",
+    comment: "183 fragments d'un plafond arraché par le cyclone Irma en 2017 (approximativement 40 cm x 13 cm chaque) . Chacun porte un fragment végétal unique. "
+  },
+  {
+    id: "enc-0105",
+    group: "encyclopedia",
+    title: "Echarpé - rattus norvegicus - Chine, Japon et Nord de la Russie",
+    year: "2018",
+    medium: "stylo bille sur papier",
+    wCm: 40.61,
+    hCm: 59.4,
+    image: "images/enc-0105.jpg",
+    comment: "cadavre de rat noir nettoyé par des bernards l'ermites"
+  },
+  {
+    id: "enc-0106",
+    group: "encyclopedia",
+    title: "Poulet de Gala - gallus gallus - Nouvelle Guinée ou Asie du Sud",
+    year: "2019",
+    medium: "huile sur panneau d'isolation",
+    wCm: 35.29,
+    hCm: 52,
+    image: "images/enc-0106.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0107",
+    group: "encyclopedia",
+    title: "Euphorbe Sèche - euphorbia lactea - Inde",
+    year: "2018",
+    medium: "huile et feutre acrylique sur ardoise",
+    wCm: 25,
+    hCm: 49.9,
+    image: "images/enc-0107.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0108",
+    group: "encyclopedia",
+    title: "Beau Thon - thunnus albacares - mers tropicales et sub-tropicales",
+    year: "2019",
+    medium: "huile sur toile",
+    wCm: 200,
+    hCm: 107,
+    image: "images/enc-0108.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0109",
+    group: "encyclopedia",
+    title: "Crabe Pointilliste - cardisoma guanhumi - Amériques",
+    year: "2018",
+    medium: "stylo bille et feutres acryliques sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0109.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0110",
+    group: "encyclopedia",
+    title: "Cimetière de Cierges - cephalocereus nobilis - Mexique",
+    year: "2018",
+    medium: "huile sur tôle",
+    wCm: 230,
+    hCm: 95.94,
+    image: "images/enc-0110.jpg",
+    comment: "Ensemble de squelettes de cactus cierges récupéré sur la plage de Colombier à Saint Barthélemy et peint sur une tôle de toit arrachée par le cyclone Irma"
+  },
+  {
+    id: "enc-0111",
+    group: "encyclopedia",
+    title: "Pince de Soudard - coenobita clypeatus - Antilles",
+    year: "2017",
+    medium: "style bille sur papier",
+    wCm: 59.4,
+    hCm: 42,
+    image: "images/enc-0111.jpg",
+    comment: "Pince de bernard l'ermite"
+  },
+  {
+    id: "enc-0112",
+    group: "encyclopedia",
+    title: "Changement de Plumes - ara ararauna - Amérique du Sud",
+    year: "2018",
+    medium: "stylo bille et feutres acryliques sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0112.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0113",
+    group: "encyclopedia",
+    title: "Coin-Coin - cairina moschata - Amérique du Sud",
+    year: "2018",
+    medium: "huile sur panneau d'isolation",
+    wCm: 60,
+    hCm: 86.36,
+    image: "images/enc-0113.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0114",
+    group: "encyclopedia",
+    title: "Pot Cassé - sansevieria trifasciata - Afrique de l'Ouest",
+    year: "2017",
+    medium: "encre de Chine sur toile",
+    wCm: 254,
+    hCm: 70,
+    image: "images/enc-0114.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0115",
+    group: "encyclopedia",
+    title: "Lambi - strombus gigas - Antilles",
+    year: "2017",
+    medium: "huile sur tôle",
+    wCm: 31.41,
+    hCm: 45,
+    image: "images/enc-0115.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0116",
+    group: "encyclopedia",
+    title: "Tourterelle Esquissée - zenaida macroura - Amérique Centrale",
+    year: "2018",
+    medium: "crayon sur papier",
+    wCm: 30.5,
+    hCm: 59,
+    image: "images/enc-0116.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0117",
+    group: "encyclopedia",
+    title: "Pétales - delonix regia - Madagascar",
+    year: "2019",
+    medium: "huile sur bois",
+    wCm: 240,
+    hCm: 116.8,
+    image: "images/enc-0117.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0118",
+    group: "encyclopedia",
+    title: "Mérite d'Avantage de Recherche - cleome viscosa - probablement Asie",
+    year: "2019",
+    medium: "huile sur tôle",
+    wCm: 42,
+    hCm: 58.15,
+    image: "images/enc-0118.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0119",
+    group: "encyclopedia",
+    title: "rainette Séchée - osteopilus septentrionalis - Antilles",
+    year: "2019",
+    medium: "feutre acrylique sur carrelage",
+    wCm: 25,
+    hCm: 39.33,
+    image: "images/enc-0119.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0120",
+    group: "encyclopedia",
+    title: "Fleur de Fourmis - capparis indica - Antilles",
+    year: "2019",
+    medium: "feutre acrylique et aquarelle sur papier noir",
+    wCm: 21,
+    hCm: 28.06,
+    image: "images/enc-0120.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0121",
+    group: "encyclopedia",
+    title: "Bianca - cacatua alba - Indonésie",
+    year: "2019",
+    medium: "huile sur toile",
+    wCm: 80,
+    hCm: 108.43,
+    image: "images/enc-0121.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0122",
+    group: "encyclopedia",
+    title: "Inyoni - ara severus - Amérique du Sud",
+    year: "2019",
+    medium: "huile sur toile",
+    wCm: 80,
+    hCm: 118,
+    image: "images/enc-0122.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0123",
+    group: "encyclopedia",
+    title: "Palmier Rouge - wodyetia bifurcata - Australie",
+    year: "2017",
+    medium: "feutre acrylique sur papier",
+    wCm: 21.87,
+    hCm: 30,
+    image: "images/enc-0123.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0124",
+    group: "encyclopedia",
+    title: "Liane Bruyante - petrea volubilis - Amérique Centrale",
+    year: "2019",
+    medium: "huile sur papier sargasse",
+    wCm: 25,
+    hCm: 40.87,
+    image: "images/enc-0124.jpg",
+    comment: "Liane de Saint Jean peinte sur un morceau de papier fait à partir de sargasses recyclées"
+  },
+  {
+    id: "enc-0125",
+    group: "encyclopedia",
+    title: "Live Tweet - melopsittacus undulatus - Australie",
+    year: "2018",
+    medium: "huile sur panneau d'isolation",
+    wCm: 66.63,
+    hCm: 61,
+    image: "images/enc-0125.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0126",
+    group: "encyclopedia",
+    title: "Lys à l'Huile - hymenocalis caribea - Antilles",
+    year: "2017",
+    medium: "styloe bille et feutre acrylique sur papier",
+    wCm: 30,
+    hCm: 34.78,
+    image: "images/enc-0126.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0127",
+    group: "encyclopedia",
+    title: "Poisson Local - haemulon flavolineatum - Océan Atlantique Tropical",
+    year: "2019",
+    medium: "huile sur toile",
+    wCm: 55,
+    hCm: 41,
+    image: "images/enc-0127.jpg",
+    comment: "J'avais été choqué de tomber au supermarché sur ce poisson pêché par des pêcheurs de Saint Barthélemy, sous barquette plastique avec la mention Poisson Local. Pour moi c'est un manque de respect de ne pas préciser son espèce."
+  },
+  {
+    id: "enc-0128",
+    group: "encyclopedia",
+    title: "Pommes d'Amour - punica granatum - Asie Centrale",
+    year: "2019",
+    medium: "huile et stylo bille sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0128.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0129",
+    group: "encyclopedia",
+    title: "Sargasses sur Lit de Sargasses - sagassum fluitans - Atlantique Occidental",
+    year: "2019",
+    medium: "feutre acrylique et encre de Chine sur papier sargasse",
+    wCm: 20,
+    hCm: 26.05,
+    image: "images/enc-0129.jpg",
+    comment: "dessin de sargasses peintes sur du papier fabriqué à partir de sargasses recyclées"
+  },
+  {
+    id: "enc-0130",
+    group: "encyclopedia",
+    title: "Colombe Diamant - geopelia cuneata - Australie",
+    year: "2018",
+    medium: "huile sur panneau d'isolation",
+    wCm: 36.5,
+    hCm: 31.08,
+    image: "images/enc-0130.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0131",
+    group: "encyclopedia",
+    title: "Perroquet Mouillé - sparisoma viride - Antilles",
+    year: "2019",
+    medium: "huile sur toile",
+    wCm: 68,
+    hCm: 39,
+    image: "images/enc-0131.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0132",
+    group: "encyclopedia",
+    title: "Bourrache Indienne - plectranthus amboinicus - Afrique",
+    year: "2018",
+    medium: "feutres acrylique sur ardoise",
+    wCm: 30,
+    hCm: 44.28,
+    image: "images/enc-0132.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0133",
+    group: "encyclopedia",
+    title: "Lord of the Flies - sus scrofa domesticus - origine indéterminée",
+    year: "2018",
+    medium: "huile sur bois",
+    wCm: 69.58,
+    hCm: 198,
+    image: "images/enc-0133.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0134",
+    group: "encyclopedia",
+    title: "crottes de Nain - equus caballus - Iles Shetland",
+    year: "2019",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0134.jpg",
+    comment: "Crottin de shetland"
+  },
+  {
+    id: "enc-0135",
+    group: "encyclopedia",
+    title: "Tourterelle Triste - zenaida macroura - Amérique du Nord et Centrale",
+    year: "2018",
+    medium: "huile sur ardoise",
+    wCm: 21.76,
+    hCm: 32,
+    image: "images/enc-0135.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0136",
+    group: "encyclopedia",
+    title: "Joséphine Piéride du Tapier - ascia monuste - Sud des Etats-Unis et Antilles",
+    year: "2018",
+    medium: "encre et feutre acrylique sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0136.jpg",
+    comment: "L'endroit et l'envers d'un papillon très commun à Saint Barthélemy qui sort par milliers quand les premières pluies mettent fin à la saison sèche."
+  },
+  {
+    id: "enc-0137",
+    group: "encyclopedia",
+    title: "Mad Macaw - ara ararauna - Amérique du Sud",
+    year: "2018",
+    medium: "huile sur panneau d'isolation",
+    wCm: 50.5,
+    hCm: 121.92,
+    image: "images/enc-0137.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0138",
+    group: "encyclopedia",
+    title: "Mapou Rouge - cordia sebestena - Antilles",
+    year: "2019",
+    medium: "stylo bille et huile sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0138.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0139",
+    group: "encyclopedia",
+    title: "Le Petit Chat Est Mort - felis silvestris catus - probablement Mésopotamie",
+    year: "2019",
+    medium: "huile sur toile",
+    wCm: 70,
+    hCm: 110,
+    image: "images/enc-0139.jpg",
+    comment: "Triste rencontre en allant à la boulangerie un dimanche matin: un magnifique chat tué par une voiture. Ce qui rend cette scène d'autant plus tragique est la présence d'un collier..."
+  },
+  {
+    id: "enc-0140",
+    group: "encyclopedia",
+    title: "Patate Douce - ipomomea batatas - Amérique Centrale ou Amérique du Sud",
+    year: "2019",
+    medium: "stylo bille et café sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0140.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0141",
+    group: "encyclopedia",
+    title: "Faux Jasmin - trapechelospermum jasminoides - Extrême Orient",
+    year: "2018",
+    medium: "huile sur tôle",
+    wCm: 80,
+    hCm: 137.38,
+    image: "images/enc-0141.jpg",
+    comment: "peint sur une tôle de toit arrachée par le cyclone Irma en 2017"
+  },
+  {
+    id: "enc-0142",
+    group: "encyclopedia",
+    title: "Bourse Nue - aluterus punctata - mers tropicales et sub-tropicales",
+    year: "2020",
+    medium: "huile sur toile",
+    wCm: 57,
+    hCm: 40,
+    image: "images/enc-0142.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0143",
+    group: "encyclopedia",
+    title: "Petite Fleur Jaune - trimezia fosteriana - Antilles et Venezuela",
+    year: "2018",
+    medium: "stylo bille et feutre acrylique sur papier",
+    wCm: 21,
+    hCm: 29.7,
+    image: "images/enc-0143.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0144",
+    group: "encyclopedia",
+    title: "Couresse Figée - alsophis rijgersmaei - Anguilla, saint Martin et Saint Barthélemy",
+    year: "2017",
+    medium: "encre de Chine sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0144.jpg",
+    comment: "Un des trois reptiles endémiques des Iles du Nord la coureuse du Banc d'Anguilla comme on l'appelle ici est un petit serpent inoffensif."
+  },
+  {
+    id: "enc-0145",
+    group: "encyclopedia",
+    title: "Poulet - gallus gallus - Nouvelle Guinée ou Asie du Sud",
+    year: "2018",
+    medium: "huile sur panneau d'isolation",
+    wCm: 61,
+    hCm: 59.2,
+    image: "images/enc-0145.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0146",
+    group: "encyclopedia",
+    title: "Ma Banane - musa acuminata paradisiaca - Inde et Australie",
+    year: "2018",
+    medium: "stylo bille, crayon et feutre acrylique sur papier",
+    wCm: 21,
+    hCm: 28.74,
+    image: "images/enc-0146.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0147",
+    group: "encyclopedia",
+    title: "Eponge - aplysina fistularis - Antilles",
+    year: "2018",
+    medium: "stylo bille et crayon blanc sur papier",
+    wCm: 22.23,
+    hCm: 30,
+    image: "images/enc-0147.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0148",
+    group: "encyclopedia",
+    title: "Jeune Frégate - fregata - océans tropicaux et sub-tropicaux",
+    year: "2018",
+    medium: "huile sur bois",
+    wCm: 96,
+    hCm: 243,
+    image: "images/enc-0148.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0149",
+    group: "encyclopedia",
+    title: "Taurillon - bos taurus - Proche Orient",
+    year: "2020",
+    medium: "huile sur toile",
+    wCm: 77,
+    hCm: 130,
+    image: "images/enc-0149.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0150",
+    group: "encyclopedia",
+    title: "Zeb Dwagon - argemone mexicana - Mexique et Sud des Etats-Unis",
+    year: "2020",
+    medium: "feutre acrylique sur papier",
+    wCm: 18,
+    hCm: 26,
+    image: "images/enc-0150.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0151",
+    group: "encyclopedia",
+    title: "Assiette - epinephelus adscensionis - Antilles",
+    year: "2019",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0151.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0152",
+    group: "encyclopedia",
+    title: "Mouette Cyclonée - leucophaeus atricilla - Amériques",
+    year: "2017",
+    medium: "feutre acrylique sur tôle",
+    wCm: 69.16,
+    hCm: 60,
+    image: "images/enc-0152.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0153",
+    group: "encyclopedia",
+    title: "Offshoot - agave montana villareal - Mexique",
+    year: "2019",
+    medium: "stylo bille sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0153.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0154",
+    group: "encyclopedia",
+    title: "Crâne - capra hircus - origine indéterminée",
+    year: "2018",
+    medium: "stylo bille, crayon blanc et encre de Chine sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0154.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0155",
+    group: "encyclopedia",
+    title: "Ton sur ton - ruellia simplex - Caraibes et Amérique du Sud",
+    year: "2018",
+    medium: "stylo bille et feutre acrylique sur papier",
+    wCm: 21,
+    hCm: 28.79,
+    image: "images/enc-0155.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0156",
+    group: "encyclopedia",
+    title: "Marlin Bleu - makaira nigricans - Océan Atlantique",
+    year: "2020",
+    medium: "huile sur toile",
+    wCm: 120,
+    hCm: 70,
+    image: "images/enc-0156.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0157",
+    group: "encyclopedia",
+    title: "Jolie Gallinule - gallinula galeata - Amériques",
+    year: "2018",
+    medium: "huile sur panneau d'isolation",
+    wCm: 53,
+    hCm: 36,
+    image: "images/enc-0157.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0158",
+    group: "encyclopedia",
+    title: "Pompons Jaunes - albizia lebbeck - Asie tropicale",
+    year: "2019",
+    medium: "stylo bille, aquarelle et feutre acrylique sur papier",
+    wCm: 42,
+    hCm: 59.4,
+    image: "images/enc-0158.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0159",
+    group: "encyclopedia",
+    title: "Bigaradier - citrus aurantium - Sud de l'Himalaya",
+    year: "2019",
+    medium: "huile sur toile",
+    wCm: 120,
+    hCm: 170,
+    image: "images/enc-0159.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0160",
+    group: "encyclopedia",
+    title: "Poule à Tête Noire - gallus gallus - Nouvelle Guinée ou Asie du Sud",
+    year: "2019",
+    medium: "huile sur panneau d'isolation",
+    wCm: 60,
+    hCm: 54.38,
+    image: "images/enc-0160.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0161",
+    group: "encyclopedia",
+    title: "Aloès - aloe arborescens - Afrique",
+    year: "2019",
+    medium: "encre de Chine sur bois",
+    wCm: 100,
+    hCm: 138.41,
+    image: "images/enc-0161.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0162",
+    group: "encyclopedia",
+    title: "Black Star Surfboard - diadema antillarum - Ocean Atlantique Occidental et Antilles",
+    year: "2023",
+    medium: "feutre acrylique sur planche de surf",
+    wCm: 44.53,
+    hCm: 166,
+    image: "images/enc-0162.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0163",
+    group: "encyclopedia",
+    title: "Roseau des Indes - cordyline fruticosa - Asie et Océanie",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 158,
+    hCm: 75.9,
+    image: "images/enc-0163.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0164",
+    group: "encyclopedia",
+    title: "Golden Shower - cassia fistula - Asie du Sud",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 117,
+    hCm: 186.34,
+    image: "images/enc-0164.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0165",
+    group: "encyclopedia",
+    title: "Conures Soleil Dans un Quenettier - aratinga soltitialis et melicoccus bijugatus - Amérique du Sud",
+    year: "2025",
+    medium: "huile sur toile",
+    wCm: 170,
+    hCm: 98.4,
+    image: "images/enc-0165.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0166",
+    group: "encyclopedia",
+    title: "Clerodendron - clerodendrum quadriloculare - Philippines et Nouvelle Guinée",
+    year: "2025",
+    medium: "huile sur toile",
+    wCm: 114,
+    hCm: 187.41,
+    image: "images/enc-0166.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0167",
+    group: "encyclopedia",
+    title: "Flamboyant - delonix regia - Madagascar",
+    year: "2025",
+    medium: "huile sur toile",
+    wCm: 115,
+    hCm: 190.94,
+    image: "images/enc-0167.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0168",
+    group: "encyclopedia",
+    title: "L'Arbre de la Famille - ceiba insignis - Equateur et Nord du Pérou",
+    year: "2023",
+    medium: "Acrylique sur toile",
+    wCm: 160,
+    hCm: 59.25,
+    image: "images/enc-0168.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0169",
+    group: "encyclopedia",
+    title: "Herbier 2 - espèces variées",
+    year: "2024",
+    medium: "acrylique sur palissade de chantier",
+    wCm: 1160,
+    hCm: 244.5,
+    image: "images/enc-0169.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0170",
+    group: "encyclopedia",
+    title: "Petit Herbier - espèces variées",
+    year: "2024",
+    medium: "acrylique sur bois",
+    wCm: 240,
+    hCm: 120,
+    image: "images/enc-0170.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0171",
+    group: "encyclopedia",
+    title: "Poirier Pays - tabebuia heterophylla - Antilles ",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 185,
+    hCm: 95.7,
+    image: "images/enc-0171.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0172",
+    group: "encyclopedia",
+    title: "Wrightia - wrightia antidysenterica - Sri Lanka",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 102,
+    hCm: 99.29,
+    image: "images/enc-0172.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0173",
+    group: "encyclopedia",
+    title: "Frangipanier - plumeria obtusa - Amérique Centrale t Antilles",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 125,
+    hCm: 82,
+    image: "images/enc-0173.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0174",
+    group: "encyclopedia",
+    title: "Ixora 1 - ixora - Asie du Sud",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 90,
+    hCm: 100,
+    image: "images/enc-0174.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0175",
+    group: "encyclopedia",
+    title: "Ixora 2 - ixora - Asie du Sud",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 90,
+    hCm: 98.59,
+    image: "images/enc-0175.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0176",
+    group: "encyclopedia",
+    title: "Pommier de Sodome - calotropis procera - Afrique et Moyen-Orient",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 109,
+    hCm: 163,
+    image: "images/enc-0176.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0177",
+    group: "encyclopedia",
+    title: "Ricin - ricinus communis - Afrique tropicale",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 175,
+    hCm: 86.79,
+    image: "images/enc-0177.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0178",
+    group: "encyclopedia",
+    title: "Cochon Pendu - sus scrofa domesticus - Mésopotamie",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 112,
+    hCm: 202.94,
+    image: "images/enc-0178.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0179",
+    group: "encyclopedia",
+    title: "Philodendron - philodendron mayoi - Amérique Centrale",
+    year: "2023",
+    medium: "acrylique sur toile",
+    wCm: 190,
+    hCm: 96.95,
+    image: "images/enc-0179.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0180",
+    group: "encyclopedia",
+    title: "Nautical Flags 1",
+    year: "2025",
+    medium: "huile sur toile",
+    wCm: 90,
+    hCm: 127.24,
+    image: "images/enc-0180.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0181",
+    group: "encyclopedia",
+    title: "Nautical Flags 2",
+    year: "2025",
+    medium: "huile sur toile",
+    wCm: 90,
+    hCm: 123.87,
+    image: "images/enc-0181.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0182",
+    group: "encyclopedia",
+    title: "Nautical Flags 1",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 99.83,
+    hCm: 125,
+    image: "images/enc-0182.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0183",
+    group: "encyclopedia",
+    title: "La Sieste Après le Repas Dominical - ateles fusciceps rufiventris - Colombie",
+    year: "2023",
+    medium: "huile sur toile",
+    wCm: 240,
+    hCm: 107.63,
+    image: "images/enc-0183.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0184",
+    group: "encyclopedia",
+    title: "At Work",
+    year: "2020",
+    medium: "huile sur toile",
+    wCm: 90,
+    hCm: 120,
+    image: "images/enc-0184.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0185",
+    group: "encyclopedia",
+    title: "Unicorn Pinata Used",
+    year: "2020",
+    medium: "huile sur toile",
+    wCm: 70,
+    hCm: 70,
+    image: "images/enc-0185.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0186",
+    group: "encyclopedia",
+    title: "Cronos",
+    year: "2020",
+    medium: "huile sur toile",
+    wCm: 143,
+    hCm: 220,
+    image: "images/enc-0186.jpg",
+    comment: "J'ai été obsédé par le thème de Cronos pendant plus de 25 ans. Le titan qui dévora ses enfants pour qu'ils ne puissent pas le remplacer. Pendant longtemps, influencé par la vision de Goya je pensais à une scène d'anthopophagie. Puis un jour c'est le thème de la culpabilité qui m'a intéressé: le parricide et infanticide poursuivi par les déesses de la vengeance qui ne lui laissent aucun répit. La folie. "
+  },
+  {
+    id: "enc-0187",
+    group: "encyclopedia",
+    title: "Discarded Love",
+    year: "2020",
+    medium: "huile sur toile",
+    wCm: 240,
+    hCm: 118.42,
+    image: "images/enc-0187.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0188",
+    group: "encyclopedia",
+    title: "D'Artagnan",
+    year: "2019",
+    medium: "huile sur toile",
+    wCm: 110,
+    hCm: 52.52,
+    image: "images/enc-0188.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0189",
+    group: "encyclopedia",
+    title: "Omo Masalai - Nouvelle Guinée",
+    year: "2019",
+    medium: "huile sur papier",
+    wCm: 100,
+    hCm: 193,
+    image: "images/enc-0189.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0190",
+    group: "encyclopedia",
+    title: "New York Street Fruit Vendor",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 300,
+    hCm: 256,
+    image: "images/enc-0190.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0191",
+    group: "encyclopedia",
+    title: "Raisin d'Amérique - phytolacca americana - Etats-Unis",
+    year: "2024",
+    medium: "huile sur toile",
+    wCm: 150,
+    hCm: 150,
+    image: "images/enc-0191.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0192",
+    group: "encyclopedia",
+    title: "Duk Duk - Nouvelle Bretagne",
+    year: "2019",
+    medium: "huile sur papier",
+    wCm: 120,
+    hCm: 259,
+    image: "images/enc-0192.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0193",
+    group: "encyclopedia",
+    title: "Gui - viscum album - Europe",
+    year: "2018",
+    medium: "feutre acrylique sur toile",
+    wCm: 160,
+    hCm: 104.85,
+    image: "images/enc-0193.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0194",
+    group: "encyclopedia",
+    title: "Ndbele - Afrique du Sud et Zimbabwe",
+    year: "2018",
+    medium: "huile sur toile",
+    wCm: 120,
+    hCm: 254,
+    image: "images/enc-0194.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0195",
+    group: "encyclopedia",
+    title: "chien",
+    year: "2023",
+    medium: "huile sur bois",
+    wCm: 41.5,
+    hCm: 28,
+    image: "images/enc-0195.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0196",
+    group: "encyclopedia",
+    title: "Crocodile",
+    year: "2023",
+    medium: "huile sur bois",
+    wCm: 140,
+    hCm: 63,
+    image: "images/enc-0196.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0197",
+    group: "encyclopedia",
+    title: "Martin",
+    year: "2019",
+    medium: "huile sur toile",
+    wCm: 75,
+    hCm: 141,
+    image: "images/enc-0197.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0198",
+    group: "encyclopedia",
+    title: "Boîtes à Outils",
+    year: "2023",
+    medium: "huile sur bois",
+    wCm: 122,
+    hCm: 75,
+    image: "images/enc-0198.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0199",
+    group: "encyclopedia",
+    title: "Cabinet de Curiosités",
+    year: "2023",
+    medium: "huile sur bois",
+    wCm: 122,
+    hCm: 100,
+    image: "images/enc-0199.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0200",
+    group: "encyclopedia",
+    title: "Perroquet",
+    year: "2023",
+    medium: "huile sur bois",
+    wCm: 36,
+    hCm: 58.5,
+    image: "images/enc-0200.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0201",
+    group: "encyclopedia",
+    title: "Pingouin",
+    year: "2023",
+    medium: "huile sur bois",
+    wCm: 37.5,
+    hCm: 58,
+    image: "images/enc-0201.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0202",
+    group: "encyclopedia",
+    title: "Petit Tonnerre",
+    year: "2023",
+    medium: "huile sur bois",
+    wCm: 63.5,
+    hCm: 48.5,
+    image: "images/enc-0202.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0203",
+    group: "encyclopedia",
+    title: "Perroquet",
+    year: "2023",
+    medium: "huile sur bois",
+    wCm: 36,
+    hCm: 58.5,
+    image: "images/enc-0203.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0204",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 1 - euphorbia lactea - Asie tropicale",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0204.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0205",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 2 - opuntia microdasys - Mexique",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0205.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0206",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 3 - agave montana villareal - Mexique",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0206.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0207",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 4 - philodendron xanadu - Brésil",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0207.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0208",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 5 - alluaudia procera - Madagascar",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0208.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0209",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 6 - opuntia tricantha - Antilles",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0209.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0210",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 7 - agave desmettiana - Mexique",
+    year: "2023",
+    medium: "acrylique et stylo bille sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0210.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0211",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 8 - haworthia superfasciata - Afrique du Sud",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0211.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0212",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 9 - stetsonia coryne - Amérique du Sud",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0212.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0213",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 10 - rhipsalis baccifera horrida - Amérique du Sud",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0213.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0214",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 11 - eriocactus warasii - Brésil",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0214.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0215",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 12 - agave attenuata - Mexique",
+    year: "2023",
+    medium: "acrylique et stylo bille sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0215.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0216",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 13 - aloe arborescens - Afrique du Sud",
+    year: "2023",
+    medium: "acrylique et stylo bille sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0216.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0217",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 14 - opuntia rubescens - Antilles ou Mexique",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0217.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0218",
+    group: "encyclopedia",
+    title: "Blue Pot Serie - 15 - echinopsis calochlora - Amérique du Sud",
+    year: "2023",
+    medium: "acrylique, stylo bille et crayon sur papier",
+    wCm: 42,
+    hCm: 57.87,
+    image: "images/enc-0218.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0219",
+    group: "encyclopedia",
+    title: "Gaïac - guaiacum officinale - Antilles",
+    year: "2023",
+    medium: "fusain sur toile",
+    wCm: 190,
+    hCm: 92.23,
+    image: "images/enc-0219.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0220",
+    group: "encyclopedia",
+    title: "Maurice",
+    year: "2019",
+    medium: "fusain sur toile",
+    wCm: 101,
+    hCm: 220,
+    image: "images/enc-0220.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0221",
+    group: "encyclopedia",
+    title: "Maillot de Bain",
+    year: "2016",
+    medium: "Stylo bille sur papier",
+    wCm: 39.3,
+    hCm: 29.5,
+    image: "images/enc-0221.jpg",
+    comment: ""
+  },
+  {
+    id: "enc-0222",
+    group: "encyclopedia",
+    title: "Jeeves",
+    year: "2019",
+    medium: "huile sur toile",
+    wCm: 75,
+    hCm: 160,
+    image: "images/enc-0222.jpg",
+    comment: ""
+  },
+  {
+    id: "OTH-0101",
+    group: "other",
+    series: "Figures",
+    title: "Autre série (exemple)",
+    year: "2022",
+    medium: "Acrylique",
+    wCm: 60,
+    hCm: 140,
+    image: "images/exemple-3.jpg",
+    comment: "Appartient à ‘Other Works’."
+  }
+];
+
+/* ---------- Utils ---------- */
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+function escapeHtml(str){
+  return (str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+}
+function seededRng(seedStr){
+  function xmur3(str){ for(var i=0,h=1779033703^str.length;i<str.length;i++){
+    h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; }
+    return function(){ h=Math.imul(h^h>>>16,2246822507); h=Math.imul(h^h>>>13,3266489909); return (h^h>>>16)>>>0; };
+  }
+  function mulberry32(a){ return function(){ var t=a+=0x6D2B79F5; t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; } }
+  const s = xmur3(seedStr)();
+  return mulberry32(s);
+}
+function rectsIntersect(a, b){
+  return !(a.x+a.w <= b.x || b.x+b.w <= a.x || a.y+a.h <= b.y || b.y+b.h <= a.y);
+}
+
+/**
+ * Placement stable (crucial) :
+ * - on place les œuvres dans un ordre déterministe
+ * - chaque œuvre tente des positions générées à partir de son id (seed)
+ * - ajouter une œuvre n’affecte pas les positions des précédentes
+ * => “plan infini” qui grandit depuis le centre
+ */
+function stablePlace(items, globalSeed="encyclopedia-v1"){
+  const sorted = items.slice().sort((a,b)=>{
+    const ay = (a.year||"").toString();
+    const by = (b.year||"").toString();
+    if (ay !== by) return ay.localeCompare(by);
+    return (a.id||"").localeCompare(b.id||"");
+  });
+
+  const placed = [];
+  const padding = 26;        // ↑ augmente si tu veux plus d’air (ex: 32)
+  const grid = 6;            // snap discret
+  const ratio = 1.75;        // forme de l’ovale (1.4 rond -> 2.2 très allongé)
+  const baseB = 120;         // taille initiale (vertical)
+  const stepB = 34;          // croissance par anneau (↑ = moins de collisions)
+  const triesPerRing = 260;  // essais par anneau
+  const maxRings = 600;      // limite de sécurité (très large)
+
+  function collides(candidate){
+    for (const p of placed){
+      const a = {x:candidate.x - padding, y:candidate.y - padding, w:candidate.w + padding*2, h:candidate.h + padding*2};
+      const b = {x:p.x - padding, y:p.y - padding, w:p.w + padding*2, h:p.h + padding*2};
+      if (rectsIntersect(a, b)) return true;
+    }
+    return false;
+  }
+
+  for (const it of sorted){
+    const w = Math.max(8, cmToPx(it.wCm));
+    const h = Math.max(8, cmToPx(it.hCm));
+
+    const rng = seededRng(globalSeed + "::" + it.id);
+    let chosen = null;
+
+    // On agrandit l’ovale anneau par anneau jusqu’à trouver une place libre
+    for (let ring = 0; ring < maxRings && !chosen; ring++){
+      const b = baseB + ring * stepB;  // demi-petit axe
+      const a = b * ratio;             // demi-grand axe
+
+      for (let t=0; t<triesPerRing; t++){
+        const theta = rng() * Math.PI * 2;
+
+        // Remplit l’ovale (un peu plus vers l’extérieur = meilleur “contour”)
+        const u = 0.25 + 0.75 * Math.pow(rng(), 0.55);
+
+        let x = Math.cos(theta) * a * u - w/2;
+        let y = Math.sin(theta) * b * u - h/2;
+
+        x = Math.round(x / grid) * grid;
+        y = Math.round(y / grid) * grid;
+
+        const candidate = { id: it.id, x, y, w, h };
+        if (!collides(candidate)){
+          chosen = candidate;
+          break;
+        }
+      }
+    }
+
+    // Si on n’a toujours pas (extrêmement rare), on force un placement très loin SANS collision
+    if (!chosen){
+      let k = 1;
+      while (true){
+        const candidate = { id: it.id, x: k*400, y: k*400, w, h };
+        if (!collides(candidate)){ chosen = candidate; break; }
+        k++;
+      }
+    }
+
+    placed.push(chosen);
+  }
+
+  // bounds + recentrage en coordonnées positives
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  placed.forEach(p=>{
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x+p.w);
+    maxY = Math.max(maxY, p.y+p.h);
+  });
+
+  const pad = 600;
+  const shiftX = -minX + pad;
+  const shiftY = -minY + pad;
+
+  placed.forEach(p=>{ p.x += shiftX; p.y += shiftY; });
+
+  return {
+    placed,
+    bounds: { w: (maxX-minX) + pad*2, h: (maxY-minY) + pad*2 }
+  };
+}
+
+/* ---------- State pan/zoom ---------- */
+const viewport = document.getElementById('viewport');
+const canvas = document.getElementById('canvas');
+const zoomReadout = document.getElementById('zoomReadout');
+
+let state = {
+  scale: 1,
+  panX: 0,
+  panY: 0,
+  isDragging: false,
+  dragStartX: 0,
+  dragStartY: 0,
+  panStartX: 0,
+  panStartY: 0
+};
+function applyTransform(){
+  canvas.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.scale})`;
+  zoomReadout.textContent = `${Math.round(state.scale*100)}%`;
+}
+function screenToWorld(sx, sy){
+  return { x: (sx - state.panX)/state.scale, y: (sy - state.panY)/state.scale };
+}
+function zoomAt(sx, sy, newScale){
+  newScale = clamp(newScale, 0.06, 6);
+  const before = screenToWorld(sx, sy);
+  state.scale = newScale;
+  state.panX = sx - before.x * state.scale;
+  state.panY = sy - before.y * state.scale;
+  applyTransform();
+}
+
+/* ---------- Data views ---------- */
+const byId = new Map(ARTWORKS.map(a => [a.id, a]));
+let currentRoute = "encyclopedia";
+let otherSeriesFilter = null;
+
+// ce que la page “Encyclopedia” montre
+function encyclopediaItems(){
+  return ARTWORKS.filter(a => (a.group||"").toLowerCase() === "encyclopedia");
+}
+
+// ce que “Other Works” montre
+function otherItems(){
+  const list = ARTWORKS.filter(a => (a.group||"").toLowerCase() !== "encyclopedia");
+  if (!otherSeriesFilter) return list;
+  return list.filter(a => (a.series||"").toLowerCase() === otherSeriesFilter.toLowerCase());
+}
+
+/* ---------- Render ---------- */
+let lastPlacedCache = null; // bounds & placements du dernier render
+
+function render(){
+  canvas.innerHTML = "";
+
+  // seed global (optionnel) : ajoute ?seed=abc dans l’URL si tu veux un autre “univers”
+  const globalSeed = new URLSearchParams(location.search).get("seed") || "default-seed";
+
+  const items = (currentRoute === "encyclopedia") ? encyclopediaItems() : otherItems();
+  const { placed, bounds } = stablePlace(items, globalSeed);
+
+  // canvas “plan” grand
+  canvas.style.width = bounds.w + "px";
+  canvas.style.height = bounds.h + "px";
+  lastPlacedCache = { placed, bounds, items };
+
+  for (const p of placed){
+    const a = byId.get(p.id);
+    const el = document.createElement("div");
+    el.className = "artwork";
+    el.style.left = p.x + "px";
+    el.style.top  = p.y + "px";
+    el.style.width  = p.w + "px";
+    el.style.height = p.h + "px";
+    el.dataset.id = a.id;
+
+    const img = document.createElement("img");
+    img.src = a.image.replace("images/", "images/thumb/").replace(/\.(jpe?g|png|webp)$/i, ".webp");
+    img.alt = a.title || "Artwork";
+    img.loading = "lazy";
+    img.onerror = () => {
+      img.remove();
+      el.style.display = "grid";
+      el.style.placeItems = "center";
+      el.style.color = "#999";
+      el.textContent = "image manquante";
+    };
+
+    el.appendChild(img);
+    el.addEventListener("click", (ev)=>{
+      ev.stopPropagation();
+      openModal(a);
+    });
+
+    canvas.appendChild(el);
+  }
+
+  fitToBounds();
+}
+
+/* Fit view */
+function fitToBounds(){
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+
+  const worldW = parseFloat(canvas.style.width) || 2000;
+  const worldH = parseFloat(canvas.style.height) || 2000;
+
+  const padding = 60;
+  const availableW = vw - padding*2;
+  const availableH = vh - padding*2;
+
+  const s = Math.min(availableW / worldW, availableH / worldH);
+  state.scale = clamp(s, 0.06, 2.2);
+
+  state.panX = (vw/2) - (worldW/2) * state.scale;
+  state.panY = (vh/2) - (worldH/2) * state.scale;
+
+  applyTransform();
+}
+
+/* ---------- Modal (tes champs) ---------- */
+const backdrop = document.getElementById("backdrop");
+const closeModalBtn = document.getElementById("closeModal");
+
+function openModal(a){
+  document.getElementById("modalImg").src = a.image.replace("images/", "images/full/").replace(/\.(jpe?g|png|webp)$/i, ".webp");
+  document.getElementById("modalImg").alt = a.title || "Artwork";
+
+  document.getElementById("modalTitle").textContent = a.title || "Sans titre";
+  document.getElementById("modalYear").textContent = a.year || "—";
+  document.getElementById("modalMedium").textContent = a.medium || "—";
+  document.getElementById("modalSize").textContent = `${a.wCm ?? "?"} × ${a.hCm ?? "?"} cm`;
+  document.getElementById("modalComment").textContent = a.comment || "";
+
+  backdrop.classList.add("show");
+}
+function closeModal(){ backdrop.classList.remove("show"); }
+backdrop.addEventListener("click", (e)=>{ if (e.target === backdrop) closeModal(); });
+closeModalBtn.addEventListener("click", closeModal);
+window.addEventListener("keydown", (e)=>{ if (e.key === "Escape") closeModal(); });
+
+/* ---------- Pan + Zoom interactions ---------- */
+viewport.addEventListener("pointerdown", (e)=>{
+  if (e.target.closest(".artwork")) return;
+  state.isDragging = true;
+  viewport.classList.add("grabbing");
+  viewport.setPointerCapture(e.pointerId);
+  state.dragStartX = e.clientX;
+  state.dragStartY = e.clientY;
+  state.panStartX = state.panX;
+  state.panStartY = state.panY;
+});
+viewport.addEventListener("pointermove", (e)=>{
+  if (!state.isDragging) return;
+  const dx = e.clientX - state.dragStartX;
+  const dy = e.clientY - state.dragStartY;
+  state.panX = state.panStartX + dx;
+  state.panY = state.panStartY + dy;
+  applyTransform();
+});
+viewport.addEventListener("pointerup", ()=>{
+  state.isDragging = false;
+  viewport.classList.remove("grabbing");
+});
+viewport.addEventListener("wheel", (e)=>{
+  e.preventDefault();
+  const factor = (e.deltaY < 0) ? 1.08 : (1/1.08);
+  zoomAt(e.clientX, e.clientY, state.scale * factor);
+}, { passive:false });
+
+/* Touch pinch simple */
+let pinch = { active:false, dist:0, center:{x:0,y:0}, startScale:1 };
+function td(a,b){ return Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); }
+function tc(a,b){ return { x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2 }; }
+
+viewport.addEventListener("touchstart", (e)=>{
+  if (e.touches.length === 2){
+    pinch.active = true;
+    pinch.dist = td(e.touches[0], e.touches[1]);
+    pinch.center = tc(e.touches[0], e.touches[1]);
+    pinch.startScale = state.scale;
+  }
+}, {passive:false});
+viewport.addEventListener("touchmove", (e)=>{
+  if (pinch.active && e.touches.length === 2){
+    e.preventDefault();
+    const d = td(e.touches[0], e.touches[1]);
+    const c = tc(e.touches[0], e.touches[1]);
+    const ratio = d / pinch.dist;
+    zoomAt(c.x, c.y, pinch.startScale * ratio);
+  }
+}, {passive:false});
+viewport.addEventListener("touchend", (e)=>{
+  if (e.touches.length < 2) pinch.active = false;
+});
+
+/* ---------- Zoom buttons like mockup ---------- */
+document.getElementById("zoomIn").addEventListener("click", ()=>{
+  const r = viewport.getBoundingClientRect();
+  zoomAt(r.left + r.width/2, r.top + r.height/2, state.scale * 1.18);
+});
+document.getElementById("zoomOut").addEventListener("click", ()=>{
+  const r = viewport.getBoundingClientRect();
+  zoomAt(r.left + r.width/2, r.top + r.height/2, state.scale / 1.18);
+});
+document.getElementById("fit").addEventListener("click", fitToBounds);
+
+/* ---------- Search (sur ce qui est visible selon la page) ---------- */
+const search = document.getElementById("search");
+const results = document.getElementById("results");
+
+function normalize(s){ return (s||"").toLowerCase().trim(); }
+
+function currentSearchPool(){
+  return (currentRoute === "encyclopedia") ? encyclopediaItems() : otherItems();
+}
+function showResults(list){
+  results.innerHTML = "";
+  if (!list.length){
+    results.classList.add("show");
+    results.innerHTML = `<div class="muted" style="padding:8px;">Aucun résultat</div>`;
+    return;
+  }
+  results.classList.add("show");
+  for (const a of list.slice(0, 60)){
+    const div = document.createElement("div");
+    div.className = "result";
+    div.innerHTML = `
+      <div class="t">${escapeHtml(a.title || "Sans titre")}</div>
+      <div class="s">${escapeHtml(a.year || "—")} · ${escapeHtml(a.medium || "")}</div>
+    `;
+    div.addEventListener("click", ()=> focusArtwork(a.id));
+    results.appendChild(div);
+  }
+}
+
+search.addEventListener("input", ()=>{
+  const q = normalize(search.value);
+  if (!q){
+    results.classList.remove("show");
+    results.innerHTML = "";
+    return;
+  }
+  const pool = currentSearchPool();
+  const list = pool.filter(a=>{
+    const hay = normalize([a.title, a.year, a.medium, a.id, a.series].join(" "));
+    return hay.includes(q);
+  });
+  showResults(list);
+});
+
+function focusArtwork(id){
+  // Passe sur la page qui contient l’œuvre si nécessaire
+  const a = byId.get(id);
+  if (!a) return;
+
+  if ((a.group||"").toLowerCase() === "encyclopedia"){
+    setRoute("encyclopedia");
+  } else {
+    setRoute("other");
+    otherSeriesFilter = a.series || null;
+    buildSeriesPills();
+    render();
+  }
+
+  // centre + highlight + modal
+  const node = canvas.querySelector(`.artwork[data-id="${CSS.escape(id)}"]`);
+  if (!node) return;
+
+  const rect = node.getBoundingClientRect();
+  const vp = viewport.getBoundingClientRect();
+  const cx = rect.left + rect.width/2;
+  const cy = rect.top + rect.height/2;
+
+  state.panX += (vp.left + vp.width/2) - cx;
+  state.panY += (vp.top + vp.height/2) - cy;
+  applyTransform();
+
+  node.classList.remove("highlight");
+  void node.offsetWidth;
+  node.classList.add("highlight");
+
+  openModal(a);
+}
+
+/* ---------- Routes : Encyclopedia / Other / About ---------- */
+const aboutOverlay = document.getElementById("aboutOverlay");
+const otherOverlay = document.getElementById("otherOverlay");
+const navLinks = Array.from(document.querySelectorAll(".navlink"));
+
+function setRoute(route){
+  currentRoute = route;
+  navLinks.forEach(a => a.classList.toggle("active", a.dataset.route === route));
+  aboutOverlay.classList.toggle("show", route === "about");
+  otherOverlay.classList.toggle("show", route === "other");
+
+  // On rend seulement quand ça concerne le “monde” d’œuvres
+  if (route === "encyclopedia"){
+    otherSeriesFilter = null;
+    buildSeriesPills();
+    render();
+  }
+  if (route === "other"){
+    buildSeriesPills();
+    render();
+  }
+
+  // mobile close menu
+  document.getElementById("sidebar").classList.remove("open");
+}
+
+navLinks.forEach(a=>{
+  a.addEventListener("click", (e)=>{
+    e.preventDefault();
+    setRoute(a.dataset.route);
+  });
+});
+
+/* Other Works pills (séries) */
+function buildSeriesPills(){
+  const el = document.getElementById("seriesPills");
+  if (!el) return;
+  el.innerHTML = "";
+
+  const list = ARTWORKS.filter(a => (a.group||"").toLowerCase() !== "encyclopedia");
+  const series = Array.from(new Set(list.map(a => a.series).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+
+  const all = document.createElement("div");
+  all.className = "pill" + (!otherSeriesFilter ? " active" : "");
+  all.textContent = "All";
+  all.addEventListener("click", ()=>{
+    otherSeriesFilter = null;
+    buildSeriesPills();
+    render();
+  });
+  el.appendChild(all);
+
+  for (const s of series){
+    const p = document.createElement("div");
+    p.className = "pill" + (otherSeriesFilter === s ? " active" : "");
+    p.textContent = s;
+    p.addEventListener("click", ()=>{
+      otherSeriesFilter = s;
+      buildSeriesPills();
+      render();
+    });
+    el.appendChild(p);
+  }
+}
+
+/* ---------- Mobile menu ---------- */
+const burger = document.getElementById("burger");
+burger?.addEventListener("click", ()=> document.getElementById("sidebar").classList.toggle("open"));
+
+/* ---------- Init ---------- */
+document.getElementById("year").textContent = new Date().getFullYear();
+buildSeriesPills();
+render();
+applyTransform();
+window.addEventListener("resize", ()=> fitToBounds());
+</script>
+</body>
+</html>
