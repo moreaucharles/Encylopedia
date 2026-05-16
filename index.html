@@ -432,6 +432,17 @@ function cmToPx(v){
   if (!isFinite(n)) return 0;
   return n * pxPerCm;
 }
+function assetPath(imageField, sizeFolder){
+  // Nettoie espaces / caractères invisibles, puis construit un chemin webp sûr
+  const clean = String(imageField || "")
+    .trim()
+    .replace(/\s+\.(jpe?g|png|webp)$/i, ".$1"); // enlève espace juste avant l’extension
+
+  const filename = clean.split("/").pop();      // ex: enc-0123.jpg
+  const base = filename.replace(/\.(jpe?g|png|webp)$/i, "").trim(); // enc-0123
+
+  return `images/${sizeFolder}/${base}.webp`;
+}
 
 // IMPORTANT : mets toutes tes œuvres ici.
 // - group: "encyclopedia" pour l’encyclopédie (même “plan”)
@@ -3132,7 +3143,7 @@ function render(){
     el.dataset.id = a.id;
 
     const img = document.createElement("img");
-    img.src = a.image.replace("images/", "images/thumb/").replace(/\.(jpe?g|png|webp)$/i, ".webp");
+    img.src = img.src = assetPath(a.image, "thumb");
     img.alt = a.title || "Artwork";
     img.loading = "lazy";
     img.onerror = () => {
@@ -3181,7 +3192,7 @@ const backdrop = document.getElementById("backdrop");
 const closeModalBtn = document.getElementById("closeModal");
 
 function openModal(a){
-  document.getElementById("modalImg").src = a.image.replace("images/", "images/full/").replace(/\.(jpe?g|png|webp)$/i, ".webp");
+  document.getElementById("modalImg").src = assetPath(a.image, "full");
   document.getElementById("modalImg").alt = a.title || "Artwork";
 
   document.getElementById("modalTitle").textContent = a.title || "Sans titre";
